@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Search, Filter, SlidersHorizontal } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SubscriptionCard } from './SubscriptionCard'
+import { SubscriptionDetailsModal } from './SubscriptionDetailsModal'
 import { Subscription } from '@/types'
+import { blink } from '@/blink/client'
 
 // Mock data for demonstration
 const mockSubscriptions: Subscription[] = [
@@ -104,7 +106,53 @@ export function BrowseSubscriptions() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [sortBy, setSortBy] = useState('trust-high')
-  const [subscriptions] = useState<Subscription[]>(mockSubscriptions)
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+  useEffect(() => {
+    const fetchSubscriptions = async () => {
+      try {
+        const data = await blink.db.subscriptions.list({
+          where: { status: 'active' },
+          orderBy: { created_at: 'desc' }
+        })
+        
+        // Transform database data to match Subscription interface
+        const transformedData: Subscription[] = data.map((sub: any) => ({
+          id: sub.id,
+          title: sub.title || sub.service_name,
+          service: sub.service || sub.service_name,
+          description: sub.description || '',
+          totalCost: sub.total_cost || sub.monthly_cost,
+          costPerSlot: sub.cost_per_slot || (sub.monthly_cost / sub.total_spots),
+          totalSlots: sub.total_slots,
+          availableSlots: sub.available_slots,
+          duration: sub.duration || 'Monthly',
+          category: sub.category,
+          sharerUserId: sub.sharer_user_id,
+          sharerReputation: sub.sharer_reputation || 85,
+          sharerVerification: sub.sharer_verification || 'basic',
+          isActive: Number(sub.is_active) > 0,
+          createdAt: sub.created_at,
+          updatedAt: sub.updated_at,
+          trustScore: sub.trust_score || 85,
+          encryptionLevel: sub.encryption_level || 'standard'
+        }))
+        
+        setSubscriptions(transformedData)
+      } catch (error) {
+        console.error('Error fetching subscriptions:', error)
+        // Fallback to empty array on error
+        setSubscriptions([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchSubscriptions()
+  }, [])
 
   const filteredSubscriptions = subscriptions.filter(sub => {
     const matchesSearch = sub.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -137,8 +185,13 @@ export function BrowseSubscriptions() {
   }
 
   const handleViewDetails = (id: string) => {
-    console.log('Viewing details for:', id)
-    // TODO: Implement view details logic
+    setSelectedSubscriptionId(id)
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setSelectedSubscriptionId(null)
   }
 
   return (
@@ -213,11 +266,17 @@ export function BrowseSubscriptions() {
       </div>
 
       {/* Results */}
-      {sortedSubscriptions.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Loading subscriptions...</h3>
+          <p className="text-gray-600">Finding the best subscription shares for you.</p>
+        </div>
+      ) : sortedSubscriptions.length === 0 ? (
         <div className="text-center py-12">
           <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No subscriptions found</h3>
-          <p className="text-gray-600">Try adjusting your search or filters to find what you're looking for.</p>
+          <p className="text-gray-600">Try adjusting your search or filters, or be the first to create a subscription share!</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -231,6 +290,14 @@ export function BrowseSubscriptions() {
           ))}
         </div>
       )}
+
+      {/* Subscription Details Modal */}
+      <SubscriptionDetailsModal
+        subscriptionId={selectedSubscriptionId}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onJoin={handleJoinShare}
+      />
     </div>
   )
 }

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useToast } from '@/hooks/use-toast'
 import { 
   Shield, 
   Lock, 
@@ -47,6 +48,7 @@ const ENCRYPTION_LEVELS = [
 ]
 
 export default function CreateSubscriptionShare({ onSuccess }: CreateSubscriptionShareProps) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     service_name: '',
     category: '',
@@ -120,13 +122,24 @@ export default function CreateSubscriptionShare({ onSuccess }: CreateSubscriptio
       // Create the subscription share
       const subscriptionData = {
         id: `sub_${Date.now()}`,
-        sharer_id: user.id,
+        title: formData.service_name,
+        service: formData.service_name,
         service_name: formData.service_name,
         category: formData.category,
         description: formData.description,
+        total_cost: parseFloat(formData.monthly_cost),
+        cost_per_slot: parseFloat(formData.monthly_cost) / parseInt(formData.total_spots),
         monthly_cost: parseFloat(formData.monthly_cost),
+        total_slots: parseInt(formData.total_spots),
+        available_slots: parseInt(formData.available_spots),
         total_spots: parseInt(formData.total_spots),
         available_spots: parseInt(formData.available_spots),
+        duration: formData.billing_cycle === 'monthly' ? 'Monthly' : 'Yearly',
+        sharer_user_id: user.id,
+        sharer_reputation: 85, // Default for new users
+        sharer_verification: 'basic',
+        is_active: true,
+        trust_score: 85,
         encryption_level: formData.encryption_level,
         requires_verification: formData.requires_verification,
         auto_approve: formData.auto_approve,
@@ -134,9 +147,7 @@ export default function CreateSubscriptionShare({ onSuccess }: CreateSubscriptio
         renewal_date: formData.renewal_date,
         access_type: formData.access_type,
         trust_score_required: parseFloat(formData.trust_score_required),
-        status: 'active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        status: 'active'
       }
 
       await blink.db.subscriptions.create(subscriptionData)
@@ -153,6 +164,12 @@ export default function CreateSubscriptionShare({ onSuccess }: CreateSubscriptio
       }
 
       await blink.db.subscription_credentials.create(credentialData)
+
+      // Show success message
+      toast({
+        title: "Subscription Share Created!",
+        description: `Your ${formData.service_name} share has been created successfully and is now available for others to join.`,
+      })
 
       // Reset form
       setFormData({
